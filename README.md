@@ -1,6 +1,6 @@
-<<<<<<< HEAD
+
 # NBA-Analytical-Model
-=======
+
 # NBA Player Performance Prediction System
 
 A sophisticated framework for NBA player performance prediction using capability-region simulation combined with local sub-problem models.
