@@ -1,0 +1,92 @@
+[
+  {
+    "Player": "LeBron James",
+    "MP": 29,
+    "PTS": 21,
+    "TRB": 8,
+    "AST": 5,
+    "STL": 1,
+    "BLK": 0.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 35,
+    "PTS": 21,
+    "TRB": 8,
+    "AST": 9,
+    "STL": 2,
+    "BLK": 2.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 39,
+    "PTS": 27,
+    "TRB": 15,
+    "AST": 8,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 33,
+    "PTS": 19,
+    "TRB": 3,
+    "AST": 4,
+    "STL": 3,
+    "BLK": 1.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 42,
+    "PTS": 35,
+    "TRB": 12,
+    "AST": 7,
+    "STL": 1,
+    "BLK": 2.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 35,
+    "PTS": 24,
+    "TRB": 9,
+    "AST": 5,
+    "STL": 3,
+    "BLK": 0.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 37,
+    "PTS": 30,
+    "TRB": 4,
+    "AST": 3,
+    "STL": 1,
+    "BLK": 3.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 27,
+    "PTS": 18,
+    "TRB": 6,
+    "AST": 2,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 36,
+    "PTS": 32,
+    "TRB": 11,
+    "AST": 6,
+    "STL": 1,
+    "BLK": 1.0
+  },
+  {
+    "Player": "LeBron James",
+    "MP": 0,
+    "PTS": 0,
+    "TRB": 0,
+    "AST": 0,
+    "STL": 0,
+    "BLK": 0.0
+  }
+]

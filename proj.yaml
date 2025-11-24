@@ -1,0 +1,398 @@
+project:
+  name: capability-region-plus-local
+  owner: analytics/ai-lab
+  language: python>=3.10
+  brief: >
+    Unified framework for per-game capability-region simulation and local
+    sub-problem models (rebound/assist/shot). Includes apples-to-apples
+    benchmarking vs traditional ML baselines with efficiency/accuracy reporting.
+    Positional-tracking extensions are scaffolded but disabled until data arrives.
+
+goals:
+  - Maintain the global capability-region + Markov–MC simulator.
+  - Add local, frame/game-slice sub-problem models (rebounds, assists, shots).
+  - Provide rigorous A/B benchmarking vs traditional baselines and the original model.
+  - Produce publication-ready reports with efficiency, accuracy, and calibration results.
+  - Keep positional-tracking module isolated until feeds are available.
+
+scope:
+  phases:
+    - v1: global simulator parity + local models w/ box & matchup data (no tracking).
+    - v1.1: full benchmarking dashboards vs baselines (Ridge/XGB/NN).
+    - v1.2: enable positional-tracking layer (behind feature flag).
+  deliverables:
+    - JSON/CSV outputs per game
+    - Coach & analyst PDFs
+    - Benchmark report (PDF + markdown) per evaluation window
+    - Reproducible CLI/API & tests
+
+directory_structure:
+  - src/
+  - src/baselines/            # traditional ML models
+  - src/features/
+  - src/frontiers/
+  - src/regions/
+  - src/local_models/         # sub-problem models (no tracking)
+  - src/simulation/
+  - src/calibration/
+  - src/benchmarks/           # comparison & stats
+  - src/reporting/
+  - src/api/
+  - src/cli/
+  - src/utils/
+  - src/positional/           # (scaffold) disabled until tracking data
+  - configs/
+  - tests/
+  - notebooks/
+  - artifacts/
+  - outputs/
+  - logs/
+
+runtime:
+  dependencies:
+    core: [numpy, pandas, scipy, scikit-learn, statsmodels, pydantic, joblib]
+    geometry: [pypoman, volesti]
+    optimization: [cvxpy]
+    simulation: [pymoo, numba]
+    probabilistic: [copulas]
+    reporting: [matplotlib, seaborn, jinja2, weasyprint]
+    api: [fastapi, uvicorn]
+    extras: [tqdm, rich, tabulate]
+  style: black, isort, flake8, mypy
+  logging: json logs to logs/
+
+data_requirements:
+  tables:
+    players_per_game:
+      keys: [player_id, game_id, date, team_id, opponent_id]
+      fields:
+        minutes: float
+        usage: float
+        ts_pct: float
+        three_pa_rate: float
+        rim_attempt_rate: float
+        mid_attempt_rate: float
+        ast_pct: float
+        tov_pct: float
+        orb_pct: float
+        drb_pct: float
+        stl_pct: float
+        blk_pct: float
+        ft_rate: float
+        pf: float
+        role: str
+    opponent_features:
+      keys: [opponent_id, date]
+      fields:
+        scheme_drop_rate: float
+        scheme_switch_rate: float
+        scheme_ice_rate: float
+        blitz_rate: float
+        rim_deterrence_index: float
+        def_reb_strength: float
+        foul_discipline_index: float
+        pace: float
+        help_nail_freq: float
+    rotation_priors:
+      keys: [game_id, player_id]
+      fields:
+        exp_minutes: float
+        exp_usage: float
+        on_off_synergy_key: str
+    labels_game_level:
+      keys: [player_id, game_id]
+      fields:
+        PTS: int; REB: int; AST: int; STL: int; BLK: int; TOV: int; FGA: int; 3PA: int; FTA: int; PF: int
+  quality:
+    missingness_threshold: 5%
+    outlier_caps: by role & season quantiles
+    leakage_control: rolling windows cut before forecast date
+
+baselines:  # Traditional models for comparisons
+  models:
+    - ridge:
+        target: per-stat regression
+        features: [box rolling means/variances, opponent features, role, pace]
+    - xgboost:
+        params_default: {max_depth: 6, n_estimators: 500, learning_rate: 0.05}
+        targets: [PTS, REB, AST, 3PM, FTA, TOV]
+    - mlp:
+        layout: [128, 64]
+        activation: relu
+        dropout: 0.1
+  outputs:
+    - per-stat point predictions + naive intervals
+  module: src/baselines/models.py
+  functions:
+    - build_features(df: DataFrame) -> DataFrame
+    - train_model(model_name: str, X: DataFrame, y: ndarray, params: dict) -> Any
+    - predict(model, X: DataFrame) -> ndarray
+    - save(model, path: str) -> None
+    - load(path: str) -> Any
+
+features:
+  module: src/features/transform.py
+  functions:
+    - compute_scalers(X) -> RobustScalerParams
+    - apply_scalers(X, params) -> DataFrame
+    - compute_player_posteriors(df, window_cfg) -> dict[player_id, {mu,Sigma}]
+    - join_context(df_pg, df_opp, df_rot) -> DataFrame
+  configs:
+    rolling_window_games: 15-30
+    decay_half_life_games: 7
+
+frontiers:
+  module: src/frontiers/fit.py
+  functions:
+    - fit_frontier(data, x, y, strata, quantile=0.9) -> FrontierModel
+    - linearize_frontier(model, grid) -> list[Halfspace]
+    - save_frontier(model, path) -> None
+    - load_frontier(path) -> FrontierModel
+
+capability_region:
+  module: src/regions/build.py
+  definition: >
+    Ellipsoidal posterior ∩ pairwise frontier halfspaces ∩ scheme/role constraints ∩ bounds.
+  functions:
+    - credible_ellipsoid(mu, Sigma, alpha=0.80) -> Ellipsoid
+    - assemble_halfspaces(frontiers, scheme_constraints, bounds) -> HPolytope
+    - intersect_ellipsoid_polytope(E, H) -> Region
+    - sample_region(region, n, seed) -> ndarray[n,d]
+    - estimate_volume(region, n_samples) -> float
+    - hypervolume_above_baseline(region, r_dict) -> float
+
+matchup_constraints:
+  module: src/regions/matchup.py
+  functions:
+    - scheme_to_constraints(opponent_row, toggles) -> list[Halfspace]
+    - role_bounds(role, attribute_bounds) -> list[Halfspace]
+    - pairwise_frontiers_for(player_role, opponent_scheme_bin) -> list[Halfspace]
+
+simulation_global:
+  module: src/simulation/global_sim.py
+  states: [Normal, Hot, Cold, FoulRisk, WindDown]
+  functions:
+    - sample_minutes(player_id, ctx) -> float
+    - sample_usage(player_id, ctx, minutes) -> float
+    - sample_stint_states(T, P, seed=None) -> list[str]
+    - apply_state_offsets(x, states, minutes_split=None) -> ndarray
+    - project_to_box(x, minutes, opp_ctx) -> dict[str,float]
+    - simulate_player_game(region, opp_ctx, N, seed) -> dict  # distributions, risks, hv_index
+
+local_models:  # New sub-problem models (no tracking yet)
+  description: Factorized local inference for rebounds, assists, shots using game-level & matchup context.
+  module_root: src/local_models/
+  rebound:
+    module: src/local_models/rebound.py
+    features:
+      - time_to_ball_proxy: from pace, shot type, distance to rim
+      - crowd_index: opponent DRB strength + lineup height
+      - reach_margin: (orb_pct, vertical proxy)
+      - seal_angle_proxy: role-based heuristic
+    functions:
+      - featurize_rebound(game_slice_df) -> DataFrame
+      - fit_rebound_logit(df) -> SkModel
+      - predict_rebound_prob(model, df) -> ndarray
+  assist:
+    module: src/local_models/assist.py
+    features:
+      - passer_usage, passer_ast_pct, receiver_shot_quality_proxy, opponent_help_nail_freq
+      - lane_risk_proxy: (turnover rate vs blitz + help_nail_freq)
+    functions:
+      - featurize_assist(game_slice_df) -> DataFrame
+      - fit_assist_logit(df) -> SkModel
+      - predict_assist_prob(model, df) -> ndarray
+  shot:
+    module: src/local_models/shot.py
+    features:
+      - shooter_ts_context, distance_bin, pullup_vs_catch_proxy, opponent_rim_deterrence
+    functions:
+      - featurize_shot(game_slice_df) -> DataFrame
+      - fit_shot_logit(df) -> SkModel
+      - predict_shot_prob(model, df) -> ndarray
+  aggregation:
+    module: src/local_models/aggregate.py
+    functions:
+      - local_to_box_expectations(local_probs, minutes, usage, pace) -> dict[str,float]
+      - combine_with_global(global_dist, local_signals) -> dict  # recalibrate or blend
+  calibration:
+    module: src/local_models/calibrate.py
+    functions:
+      - isotonic_per_event(y_true, y_prob) -> CalModel
+      - apply_isotonic(model, y_prob) -> ndarray
+
+positional_tracking:  # scaffold only; disabled until data arrives
+  enabled: false
+  module_root: src/positional/
+  notes: >
+    When enabled, derives SCV (spatial capability volume) and overlap metrics
+    from tracking. Connects into local models by replacing proxies with measured overlaps.
+  modules:
+    - ingest_tracking.py
+    - derive_features.py
+    - build_spatial_region.py
+    - simulate_play_states.py
+
+calibration_global:
+  module: src/calibration/fit.py
+  functions:
+    - compute_pit(y_true, y_samples) -> ndarray
+    - fit_isotonic(stat, pits) -> CalModel
+    - apply_calibration(stat, samples, model) -> ndarray
+    - fit_copula(stats_matrix) -> CopulaModel
+    - sample_copula(model, marginals) -> ndarray
+
+benchmarks:  # Accuracy, efficiency, performance comparisons
+  module: src/benchmarks/compare.py
+  datasets:
+    eval_windows:
+      - rolling_30_games
+      - monthly
+      - playoffs_only
+  metrics:
+    accuracy:
+      - mae_per_stat
+      - rmse_per_stat
+      - crps_per_stat
+      - coverage_50_80
+      - ece_prob_calibration  # expected calibration error
+      - tail_recall_p95
+    efficiency:
+      - train_time_sec
+      - infer_time_ms_per_player
+      - adaptation_time_ms (scheme toggle)
+      - memory_mb
+    overall:
+      - spearman_rank_corr_with_realized
+      - decision_gain_sim  # e.g., expected loss under coach objective
+  functions:
+    - timeit_inference(model, X_or_ctx, n_trials) -> dict[timing]
+    - eval_accuracy(model_name, predictions, labels) -> dict[metrics]
+    - eval_calibration(samples_or_probs, y_true) -> dict[ece, coverage]
+    - compare_models(results_list) -> DataFrame  # side-by-side table
+    - ablation_study(config_grid) -> DataFrame
+  comparisons:
+    - original_global_only
+    - local_only (reb/ast/shot rolled up)
+    - blended_global_plus_local
+    - baselines_ridge
+    - baselines_xgboost
+    - baselines_mlp
+
+reporting:
+  module: src/reporting/build.py
+  products:
+    - coach_one_pager_pdf
+    - analyst_detail_pdf
+    - json_report
+    - csv_summary
+    - benchmark_report_pdf
+    - benchmark_markdown
+  functions:
+    - build_coach_one_pager(game_ctx, players) -> PDF
+    - build_analyst_detail(game_ctx, players, calibration) -> PDF
+    - build_benchmark_report(tables, charts, text) -> PDF
+    - write_json_report(game_ctx, payload, path) -> None
+    - write_csv_summary(players_summary, path) -> None
+
+api:
+  module: src/api/server.py
+  endpoints:
+    - GET /health
+    - POST /simulate
+      request: {game_id, date, team_id, opponent_id, players, toggles}
+      response: {players: [...], team_level: {...}, calibration_badge: {...}}
+    - POST /simulate-local
+      request: {game_id, date, events_subset}
+      response: {reb_prob, ast_prob, shot_prob, blended_box_expectations}
+    - POST /benchmark
+      request: {window, models: [names], metrics: [names]}
+      response: {summary_table, per_model_metrics, charts_ref}
+
+cli:
+  module: src/cli/main.py
+  commands:
+    - build-frontiers: {--season, --strata, --quantile}
+    - regions: {--game-id, --date, --team-id, --opponent-id, --players}
+    - simulate-global: {--game-id, --players, --N 20000, --seed, --save-json, --save-pdf}
+    - train-local: {--event [rebound|assist|shot], --cv kfold, --save}
+    - simulate-local: {--game-id, --players, --save-json}
+    - blend: {--game-id, --players, --strategy [stack|weight], --save-json}
+    - baselines-train: {--model [ridge|xgb|mlp], --save}
+    - baselines-predict: {--model, --game-ids, --save}
+    - benchmark: {--window rolling_30_games, --models all, --save-pdf, --save-md}
+    - calibrate: {--start, --end, --stats}
+    - evaluate: {--window, --stats}
+
+configs:
+  default: configs/default.yaml
+  geometry:
+    credible_alpha: 0.80
+    n_region_samples: 2000
+  simulation:
+    trials: 20000
+    n_stints: 5
+  priors:
+    minutes_sigma_by_role: {starter: 3.5, rotation: 5.0, bench: 6.5}
+    usage_beta_by_role: {starter: [8,12], rotation: [6,14], bench: [4,16]}
+  blending:
+    strategy: weighted
+    weights: {global: 0.6, local: 0.4}  # tunable via benchmark grid
+  positional:
+    enabled: false
+
+tests:
+  unit:
+    - tests/test_frontiers.py
+    - tests/test_regions.py
+    - tests/test_global_sim.py
+    - tests/test_local_rebound.py
+    - tests/test_local_assist.py
+    - tests/test_local_shot.py
+    - tests/test_benchmarks.py
+  integration:
+    - tests/test_pipeline_pregame.py
+    - tests/test_pipeline_benchmark.py
+  fixtures:
+    - fixtures/toy_game_inputs.json
+    - fixtures/small_eval_window.parquet
+
+acceptance_criteria:
+  accuracy_targets:
+    global_only: {PTS_MAE_le: 5.0, coverage80_between: [0.78, 0.84]}
+    blended: {PTS_MAE_le: 4.6, coverage80_between: [0.78, 0.86], tail_recall_p95_ge: 0.65}
+  efficiency_targets:
+    per_player_infer_time_s: {global_only_le: 2.0, blended_le: 2.5, baseline_ml_ms: 20}
+    adaptation_time_ms_on_toggle: {global_or_blended_le: 50}
+  reporting_targets:
+    benchmark_report: must include tables for MAE/RMSE/CRPS, coverage, ECE, tail recall, runtime & memory.
+
+module_function_outlines:
+  src/local_models/aggregate.py:
+    - local_to_box_expectations(local_probs: dict, minutes: float, usage: float, pace: float) -> dict
+      doc: Map local event probabilities into expected counting stats per game.
+    - blend_global_local(global_summary: dict, local_expect: dict, weights: dict) -> dict
+      doc: Weighted or stacked blending; returns recalibrated distributions.
+
+  src/benchmarks/compare.py:
+    - run_eval_window(window_df, models: list[str], cfg: dict) -> dict
+      doc: Produce predictions for each model and compute metrics.
+    - compute_metrics(y_true: DataFrame, preds: dict[str,Any]) -> dict[str,dict]
+      doc: MAE/RMSE/CRPS/coverage/ECE/tail_recall per stat.
+    - measure_efficiency(model_name: str, fn, *args, **kwargs) -> dict
+      doc: Time and memory footprints for inference & adaptation.
+    - summarize(results: dict) -> DataFrame
+      doc: One row per model with all metrics; used in reports.
+
+  src/reporting/build.py:
+    - build_benchmark_report(tables: dict, charts: dict, text: dict) -> PDF
+      doc: Side-by-side model comparison with significance notes and TL;DR.
+
+governance:
+  experiment_tracking: artifacts/ + config hash + seed per run
+  model_versioning: semantic tags vX.Y; YAML snapshot stored with artifacts
+  reproducibility: seeds persisted; Dockerfile optional
+
+notes:
+  - Keep positional proxies clearly labeled; when tracking arrives, drop-in replacements should not change interfaces.
+  - Benchmark grids should include blending weights and state amplitudes to show trade-offs between sharpness and coverage.

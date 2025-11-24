@@ -1,0 +1,44 @@
+{
+  "timestamp": "2025-11-12T19:37:15.710791",
+  "season": 2024,
+  "players_processed": 5,
+  "total_players": 5,
+  "results": [
+    {
+      "player": "Stephen_Curry",
+      "games": 82,
+      "posterior_dim": 6,
+      "region_alpha": 0.8,
+      "status": "success"
+    },
+    {
+      "player": "LeBron_James",
+      "games": 82,
+      "posterior_dim": 6,
+      "region_alpha": 0.8,
+      "status": "success"
+    },
+    {
+      "player": "Nikola_Jokic",
+      "games": 82,
+      "posterior_dim": 6,
+      "region_alpha": 0.8,
+      "status": "success"
+    },
+    {
+      "player": "Giannis_Antetokounmpo",
+      "games": 82,
+      "posterior_dim": 6,
+      "region_alpha": 0.8,
+      "status": "success"
+    },
+    {
+      "player": "Luka_Doncic",
+      "games": 82,
+      "posterior_dim": 6,
+      "region_alpha": 0.8,
+      "status": "success"
+    }
+  ],
+  "note": "Full simulation requires percentage columns (AST%, TRB%, etc.) in data"
+}

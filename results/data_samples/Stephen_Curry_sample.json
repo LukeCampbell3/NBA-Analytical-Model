@@ -1,0 +1,92 @@
+[
+  {
+    "Player": "Stephen Curry",
+    "MP": 31,
+    "PTS": 27,
+    "TRB": 5,
+    "AST": 1,
+    "STL": 1,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 35,
+    "PTS": 41,
+    "TRB": 4,
+    "AST": 4,
+    "STL": 2,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 31,
+    "PTS": 24,
+    "TRB": 7,
+    "AST": 6,
+    "STL": 0,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 30,
+    "PTS": 42,
+    "TRB": 5,
+    "AST": 5,
+    "STL": 2,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 32,
+    "PTS": 21,
+    "TRB": 5,
+    "AST": 3,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 31,
+    "PTS": 30,
+    "TRB": 8,
+    "AST": 7,
+    "STL": 2,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 31,
+    "PTS": 28,
+    "TRB": 2,
+    "AST": 4,
+    "STL": 1,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 33,
+    "PTS": 34,
+    "TRB": 2,
+    "AST": 4,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 34,
+    "PTS": 23,
+    "TRB": 5,
+    "AST": 4,
+    "STL": 1,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Stephen Curry",
+    "MP": 33,
+    "PTS": 30,
+    "TRB": 3,
+    "AST": 2,
+    "STL": 1,
+    "BLK": 1.0
+  }
+]

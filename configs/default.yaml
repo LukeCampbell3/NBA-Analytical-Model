@@ -1,0 +1,215 @@
+# NBA Player Performance Prediction System Configuration
+
+# Data paths
+data:
+  player_stats_dir: "Data"
+  processed_dir: "Data-Proc-OG"
+  artifacts_dir: "artifacts"
+  outputs_dir: "outputs"
+  logs_dir: "logs"
+
+# Feature engineering
+features:
+  rolling_window_games: 20
+  decay_half_life: 7
+  min_games_required: 10
+  missingness_threshold: 0.05
+
+# Frontier fitting
+frontiers:
+  quantile: 0.9
+  strata:
+    - role
+    - opponent_scheme_bin
+  attribute_pairs:
+    - [ts_pct, usage]
+    - [three_pa_rate, rim_attempt_rate]
+    - [ast_pct, tov_pct]
+    - [orb_pct, drb_pct]
+
+# Capability regions
+regions:
+  credibility_alpha: 0.80
+  sampling_method: "hit_and_run"
+  n_samples: 5000
+  burn_in: 1000
+  thinning: 10
+  volume_estimation_samples: 10000
+
+# Global simulation
+simulation:
+  n_trials: 20000
+  n_stints: 5
+  seed: null
+  
+  # State transition matrix
+  state_transitions:
+    Normal: [0.70, 0.15, 0.10, 0.03, 0.02]
+    Hot: [0.40, 0.50, 0.05, 0.03, 0.02]
+    Cold: [0.50, 0.10, 0.35, 0.03, 0.02]
+    FoulRisk: [0.60, 0.10, 0.10, 0.15, 0.05]
+    WindDown: [0.30, 0.05, 0.05, 0.05, 0.55]
+  
+  # State offsets (multiplicative factors)
+  state_offsets:
+    Hot:
+      scoring_efficiency: 1.10
+      usage: 1.05
+    Cold:
+      scoring_efficiency: 0.85
+      usage: 0.95
+    FoulRisk:
+      minutes: 0.80
+      foul_rate: 1.30
+    WindDown:
+      usage: 0.90
+      assist_rate: 1.10
+  
+  # Role-specific parameters
+  role_params:
+    starter:
+      minutes_mean: 33.0
+      minutes_sigma: 3.0
+      usage_alpha: 5.0
+      usage_beta: 15.0
+    rotation:
+      minutes_mean: 22.0
+      minutes_sigma: 5.0
+      usage_alpha: 4.0
+      usage_beta: 20.0
+    bench:
+      minutes_mean: 12.0
+      minutes_sigma: 6.0
+      usage_alpha: 3.0
+      usage_beta: 25.0
+
+# Local models
+local_models:
+  cross_validation_folds: 5
+  regularization_c: 1.0
+  max_iter: 1000
+  
+  # Blending weights
+  blending:
+    global_weight: 0.6
+    local_weight: 0.4
+
+# Baseline models
+baselines:
+  ridge:
+    alpha: 1.0
+  xgboost:
+    max_depth: 6
+    n_estimators: 500
+    learning_rate: 0.05
+    subsample: 0.8
+    colsample_bytree: 0.8
+  mlp:
+    hidden_layers: [128, 64]
+    activation: "relu"
+    dropout: 0.1
+    max_iter: 500
+    learning_rate_init: 0.001
+
+# Calibration
+calibration:
+  method: "isotonic"
+  copula_type: "gaussian"
+  validation_split: 0.2
+
+# Benchmarking
+benchmarking:
+  evaluation_windows:
+    - rolling_30_games
+    - monthly
+    - playoffs_only
+  
+  models_to_compare:
+    - original_global_only
+    - local_only
+    - blended_global_plus_local
+    - baselines_ridge
+    - baselines_xgboost
+    - baselines_mlp
+  
+  metrics:
+    accuracy:
+      - mae
+      - rmse
+      - crps
+      - coverage_50
+      - coverage_80
+      - ece
+      - tail_recall_p95
+    efficiency:
+      - train_time_sec
+      - infer_time_ms_per_player
+      - adaptation_time_ms
+      - memory_mb
+    overall:
+      - spearman_rank_correlation
+      - decision_gain_sim
+
+# Reporting
+reporting:
+  coach_one_pager:
+    format: "pdf"
+    page_size: "letter"
+    key_stats: ["PTS", "REB", "AST"]
+    confidence_level: 0.80
+  
+  analyst_detail:
+    format: "pdf"
+    include_calibration_diagnostics: true
+    include_region_visualizations: true
+    include_model_comparison: true
+  
+  benchmark_report:
+    format: ["pdf", "markdown"]
+    include_statistical_tests: true
+    significance_level: 0.05
+
+# API
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  timeout: 30
+  enable_cors: true
+  log_level: "info"
+
+# Parallelization
+parallelization:
+  n_workers: null  # null = use all available cores
+  enable_progress_bars: true
+
+# Positional tracking (scaffolded, disabled)
+positional:
+  enabled: false
+  tracking_data_dir: null
+  spatial_features:
+    - scv_volume
+    - overlap_index
+    - spacing_entropy
+
+# Logging
+logging:
+  level: "INFO"
+  format: "json"
+  file: "logs/system.log"
+  rotation: "daily"
+  retention_days: 30
+
+# Performance targets
+targets:
+  accuracy:
+    pts_mae_global: 5.0
+    pts_mae_blended: 4.6
+    coverage_80_min: 0.78
+    coverage_80_max: 0.86
+    tail_recall_p95_min: 0.65
+  efficiency:
+    infer_time_global_max_sec: 2.0
+    infer_time_blended_max_sec: 2.5
+    infer_time_baseline_max_ms: 20
+    adaptation_time_max_ms: 50

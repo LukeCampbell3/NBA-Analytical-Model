@@ -1,0 +1,92 @@
+[
+  {
+    "Player": "Nikola Jokic",
+    "MP": 36,
+    "PTS": 29,
+    "TRB": 13,
+    "AST": 11,
+    "STL": 1,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 35,
+    "PTS": 22,
+    "TRB": 12,
+    "AST": 7,
+    "STL": 1,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 30,
+    "PTS": 28,
+    "TRB": 14,
+    "AST": 5,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 35,
+    "PTS": 27,
+    "TRB": 10,
+    "AST": 11,
+    "STL": 0,
+    "BLK": 2.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 30,
+    "PTS": 25,
+    "TRB": 10,
+    "AST": 3,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 36,
+    "PTS": 33,
+    "TRB": 14,
+    "AST": 9,
+    "STL": 1,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 33,
+    "PTS": 28,
+    "TRB": 16,
+    "AST": 9,
+    "STL": 3,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 36,
+    "PTS": 35,
+    "TRB": 14,
+    "AST": 12,
+    "STL": 1,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 37,
+    "PTS": 35,
+    "TRB": 13,
+    "AST": 5,
+    "STL": 3,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Nikola Jokic",
+    "MP": 38,
+    "PTS": 36,
+    "TRB": 21,
+    "AST": 11,
+    "STL": 0,
+    "BLK": 1.0
+  }
+]

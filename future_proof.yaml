@@ -1,0 +1,191 @@
+project:
+  name: capability-region-forward-compat
+  brief: >
+    Forward-compatibility layer: schema evolution, new players/teams, new seasons, and
+    data-pool updates without breaking pipelines. Adds cold-start priors, schema contracts,
+    artifact auto-refresh, and CI guards.
+
+principles:
+  - Loose coupling: each stage consumes/produces typed contracts, not hard-coded columns.
+  - Be liberal in what you accept (extra columns OK), strict in what you emit.
+  - Always have a fallback: if a feature is missing, degrade gracefully with priors.
+  - Artifacts refresh automatically when the league distribution shifts.
+
+# ---------- Data Contracts & Schema Evolution ----------
+data_contracts:
+  format: pydantic_models
+  policy:
+    missing_columns: "warn_and_impute"          # never crash on missing non-critical columns
+    extra_columns: "ignore_but_log"             # allow unseen columns; surface in logs/metrics
+    renamed_columns: "aliases_supported"        # map via alias table (see schema_aliases)
+  models:
+    PlayersPerGame:
+      allow_extra: true
+      required: [player_id, game_id, date, team_id, opponent_id, minutes]
+      optional_with_defaults:
+        usage: 0.18
+        ts_pct: null  # impute from league_prior if null
+        three_pa_rate: 0.35
+        rim_attempt_rate: 0.25
+        mid_attempt_rate: 0.20
+        ast_pct: null
+        tov_pct: null
+        orb_pct: null
+        drb_pct: null
+        stl_pct: null
+        blk_pct: null
+        ft_rate: null
+        pf: 0.0
+        role: "unknown"
+    OpponentFeatures:
+      allow_extra: true
+      required_any_of: [[scheme_drop_rate, scheme_switch_rate, scheme_ice_rate], [pace]]
+      defaults:
+        rim_deterrence_index: 0.0
+        def_reb_strength: 0.0
+        help_nail_freq: 0.0
+  schema_aliases:
+    # maps legacy -> new names so old exports keep working
+    usage_rate: usage
+    ts: ts_pct
+    threepr: three_pa_rate
+    rim_rate: rim_attempt_rate
+    mid_rate: mid_attempt_rate
+
+schema_evolution:
+  detection:
+    - compare incoming columns vs contract on each load
+    - hash schema; store in logs/ingest_schema_history.json
+  migration_rules:
+    - if column renamed and alias exists -> remap
+    - if column dropped -> impute from priors or derived features
+    - if new categorical (team_id, opponent_id, role) -> register in id_registry
+  alerts:
+    severity:
+      missing_required: error
+      missing_optional: warn
+      new_categorical: info
+
+# ---------- ID Registry & Entity Resolution ----------
+id_registry:
+  storage: artifacts/registry/ids.json
+  entities: [player_id, team_id, opponent_id]
+  rules:
+    - maintain canonical ids; add aliases (vendor_a_id, vendor_b_id)
+    - if unknown id seen: add with created_at date and source
+    - support expansion teams/new franchises
+  services:
+    - resolve(entity_type: str, raw_id: str) -> canonical_id
+    - alias(entity_type: str, canonical_id: str) -> dict[provider->id]
+
+# ---------- Cold-Start & Rookies (New Players/Teams) ----------
+cold_start:
+  players:
+    strategy: hierarchical_bayes
+    priors:
+      league_baseline: artifacts/priors/league_baseline_v{season}.json
+      role_mix: {unknown: [G:0.4, W:0.35, BIG:0.25]}
+    initialization:
+      - infer_role from height/weight/usage if available; else "unknown"
+      - set posterior (mu, Sigma) = league_baseline by role
+      - widen Sigma by factor: 1.35 for first 10 games, decay exp(−games/8)
+  teams:
+    strategy: shrink_to_league_then_learn
+    opponent_features_init:
+      - set scheme rates to league medians
+      - update online with 5-game warmup (EMA half-life=3)
+
+role_inference:
+  features: [height, weight, 3PA_rate, rim_attempt_rate, blk_pct, ast_pct]
+  model: simple_logit|gbt
+  fallback: if missing features -> "unknown"
+
+# ---------- Feature Store & Dynamic Attributes ----------
+feature_store:
+  registry: artifacts/features/feature_registry.yaml
+  dynamic_attributes:
+    - add new feature columns with default=NA; include derivation function if available
+    - deprecate old features with sunset_version; keep until grace_period_end
+  transforms:
+    - robust_scaler fitted per season with rolling backfill; store params per season
+    - whitening matrix optional; recompute if drift > threshold
+
+# ---------- Drift, Refit, and Artifact Lifecycle ----------
+drift_management:
+  monitors:
+    - population_mean_shift: MMD or PSI per key feature (threshold: 0.2 PSI)
+    - covariance_shift: Fro norm change > 10% vs last season
+    - calibration_shift: ECE delta > 2% on rolling window
+  actions:
+    - frontier_refit: trigger if frontier residual MAE worsens > 10%
+    - posterior_recenter: update league priors quarterly
+    - calibration_refresh: refit isotonic monthly in-season
+  scheduler:
+    - jobs:
+      - monthly_frontier_refit
+      - weekly_calibration_refresh
+      - quarterly_priors_update
+    - artifacts versioning: semantic vX.Y; keep last 3
+
+# ---------- Graceful Degradation & Fallbacks ----------
+fallbacks:
+  region_build:
+    if opponent_features missing:
+      - use league medians and widen constraints by 10–20%
+    if Sigma not PD:
+      - add ridge εI until PD
+    if frontiers missing for stratum:
+      - back-off to nearest role bucket; else remove that constraint
+  local_models:
+    if tracking unavailable (or sparse):
+      - use proxy features (opponent rates, pace, size), mark quality="proxy"
+    if event features missing:
+      - output probability with broader intervals (+/- 0.12)
+
+# ---------- Testing, CI & Guards for 2025+ ----------
+ci_guards:
+  tests:
+    - schema_forward_compat_test:
+        input: synthetic 2025 schema with extra/missing/renamed columns
+        expect: pipeline completes; warnings logged; outputs valid
+    - unseen_ids_test:
+        input: new player_id/team_id
+        expect: cold-start priors applied; no crash
+    - drift_trigger_test:
+        simulate: feature shift; expect: frontier_refit job scheduled
+    - calibration_regression_test:
+        threshold: ECE increase <= 0.02 vs last model; else fail build
+  reproducibility:
+    - record schema hash, contract version, scaler version, priors version in every output JSON
+  performance_budget:
+    - added overhead from schema checks ≤ 3% runtime
+
+# ---------- CLI & Jobs ----------
+cli:
+  - data-validate:
+      args: [--input parquet/csv, --contract PlayersPerGame, --season 2025]
+      out: logs/validation_report.json
+  - ids-sync:
+      args: [--source vendor_a.json, --source vendor_b.json]
+      out: artifacts/registry/ids.json
+  - cold-start-init:
+      args: [--season 2025, --new-ids path.json]
+      action: create priors for new players/teams
+  - refresh-artifacts:
+      args: [--what frontiers|priors|calibration|all, --season 2025]
+  - drift-monitor:
+      args: [--window 30d, --thresholds defaults]
+
+# ---------- Acceptance Criteria ----------
+acceptance:
+  forward_compat:
+    - new season ingestion (2025+) requires no code changes
+    - previously unseen player_id/team_id processed without error
+  robustness:
+    - missing optional columns imputed; pipeline completes with WARN only
+    - extra columns ignored; alias remaps applied where configured
+  quality:
+    - cold-start players: coverage80 in [0.75, 0.88] during first 10 games
+    - after 10 games: ECE ≤ 3%, MAE within 10% of veteran baselines
+  observability:
+    - every output JSON includes: {schema_hash, contract_version, priors_version, scaler_version}

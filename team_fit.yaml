@@ -1,0 +1,113 @@
+project:
+  name: team-fit-substructure
+  brief: >
+    Represent and score player↔team and lineup↔scheme fit using shared geometry,
+    synergy graphs, and EPV uplift. Plugs into capability-region and local models.
+
+data:
+  inputs:
+    - team_tendencies:  # per team, rolling window
+        fields: [pace, 3PA_rate, rim_rate, mid_rate, ast_tempo, tov_tolerance,
+                 foul_discipline, def_coverage_drop, def_coverage_switch, def_coverage_ice,
+                 blitz_rate, oreb_emphasis, transition_rate]
+    - coach_sliders:    # optional manual ops input
+        fields: [target_usage, target_pace, spacing_need, turnover_risk_cap, foul_cap]
+    - on_off_lineups:   # for synergy edges
+        fields: [lineup_id, players[], minutes, net_rating, assist_chain_rate,
+                 spacing_proxy, oreb_proxy, turnover_chain_rate]
+  contracts:
+    tolerant_to_missing: true
+    alias_map: {threepr: 3PA_rate, rim_attempt_rate: rim_rate}
+
+models:
+  team_scheme_region:
+    module: src/fit/scheme_region.py
+    build:
+      - derive_axes: map team_tendencies + coach_sliders into attribute space (same order as player regions)
+      - shape: ellipsoid (Σ_team) ∩ halfspace caps (policy limits)
+    functions:
+      - build_team_region(team_id, date) -> TeamRegion
+      - scheme_halfspaces(team_row, sliders) -> list[Halfspace]
+
+  player_team_fit:
+    module: src/fit/fit_score.py
+    metrics:
+      - region_overlap: Vol(P ∩ S_team) / Vol(P)
+      - jaccard_support: |Samples_P ∩ Samples_S| / |Samples_P ∪ Samples_S|
+      - dist_match: 1 - KL(q_p || q_team)  # with smoothing
+      - role_pressure: penalty if minutes/usage projected exceed team caps
+    functions:
+      - sample_team_distribution(S_team, n=5000, seed=None) -> ndarray
+      - fit_scores(player_region, team_region, samples=5000) -> dict
+      - explain_fit(player_region, team_region) -> list[str]  # top aligned/misaligned axes
+
+  synergy_graph:
+    module: src/fit/synergy.py
+    edges:
+      features: [assist_chain_rate, spacing_complement, defensive_coverage_complement,
+                 turnover_chain_avoidance, oreb_boxout_complement]
+      estimator: ridge|gbt (start simple)
+    functions:
+      - build_graph(on_off_lineups) -> Graph
+      - pairwise_synergy(u, v, G) -> float
+      - lineup_synergy(players[], G) -> float  # e.g., average or spectral score
+
+  lineup_fit:
+    module: src/fit/lineup_fit.py
+    objectives:
+      - compat_score: Vol(∩_i P_i ∩ S_team)  # feasibility together
+      - coverage_score: HV(∪_i P_i; ref=r)    # roles/shot profile coverage
+      - synergy_score: lineup_synergy(players, G)
+      - epv_uplift: ΔEPV via short possession-chain sim (local models)
+    aggregation:
+      weights: {compat: 0.35, coverage: 0.2, synergy: 0.2, epv: 0.25}
+    functions:
+      - lineup_fit_score(player_regions[], team_region, G, N_samples=2000) -> dict
+      - optimize_lineup(candidates, minutes_budget, team_region, G, k=5) -> {players[], score}
+
+simulation_hooks:
+  epv:
+    module: src/epv/chain.py
+    use_local_models: true
+    steps:
+      - derive local transition probs from current scheme (lane_open, catch_window, shot_make, foul, tov)
+      - simulate M possessions; compare EPV vs baseline lineup
+    outputs: {epv_mean, epv_ci, drivers}
+
+reporting:
+  module: src/reporting/fit_cards.py
+  products:
+    - player_fit_card_pdf: overlap gauge, top 3 aligned/misaligned axes, quick notes
+    - lineup_fit_report_pdf: compat/coverage/synergy/epv table + spider charts
+  functions:
+    - render_player_fit(player_id, team_id, date) -> PDF
+    - render_lineup_fit(players[], team_id, date) -> PDF
+
+cli:
+  - build-team-region:
+      args: [--team, --date]
+  - player-fit:
+      args: [--team, --player, --date, --json-out, --pdf]
+  - lineup-fit:
+      args: [--team, --players "p1,p2,p3,p4,p5", --date, --pdf]
+  - optimize-lineup:
+      args: [--team, --candidates file.json, --minutes 240, --k 5, --out pdf]
+
+metrics_and_acceptance:
+  sanity_checks:
+    - face_validity_cases: >= 5 curated examples agree with domain judgement
+    - monotonicity: fit increases when sliders move toward player’s strengths
+  quantitative_targets:
+    - historical_corr: corr(fit_score, future_net_rating_delta) >= 0.25 across windows
+    - epv_link: top-quartile fit lineups show EPV uplift >= 0.7 pts/100 poss vs median
+  robustness:
+    - missing_inputs: degrade gracefully with priors; emit WARN not FAIL
+
+engineering:
+  caching:
+    - persist team regions & sampled team distributions per date
+    - cache pairwise synergy scores
+  versioning:
+    - include {team_region_version, synergy_model_version} in outputs
+  forward_compat:
+    - allow new attributes in team_tendencies; ignore unknowns, map via aliases if provided

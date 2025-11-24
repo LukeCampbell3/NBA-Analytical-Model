@@ -1,0 +1,92 @@
+[
+  {
+    "Player": "Luka Doncic",
+    "MP": 34,
+    "PTS": 33,
+    "TRB": 13,
+    "AST": 10,
+    "STL": 2,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 36,
+    "PTS": 49,
+    "TRB": 10,
+    "AST": 7,
+    "STL": 0,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 40,
+    "PTS": 35,
+    "TRB": 12,
+    "AST": 12,
+    "STL": 1,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 40,
+    "PTS": 18,
+    "TRB": 7,
+    "AST": 10,
+    "STL": 2,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 38,
+    "PTS": 34,
+    "TRB": 10,
+    "AST": 8,
+    "STL": 0,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 36,
+    "PTS": 23,
+    "TRB": 12,
+    "AST": 9,
+    "STL": 0,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 35,
+    "PTS": 29,
+    "TRB": 3,
+    "AST": 6,
+    "STL": 2,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 38,
+    "PTS": 31,
+    "TRB": 7,
+    "AST": 8,
+    "STL": 4,
+    "BLK": 1.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 32,
+    "PTS": 44,
+    "TRB": 6,
+    "AST": 6,
+    "STL": 1,
+    "BLK": 0.0
+  },
+  {
+    "Player": "Luka Doncic",
+    "MP": 28,
+    "PTS": 30,
+    "TRB": 4,
+    "AST": 9,
+    "STL": 1,
+    "BLK": 0.0
+  }
+]
